@@ -1,7 +1,6 @@
 import os
-import io
-import re
-import requests
+import glob
+import gdown
 import pandas as pd
 import numpy as np
 import plotly.graph_objects as go
@@ -9,7 +8,6 @@ import streamlit as st
 
 st.set_page_config(page_title="產業輪動分析系統", layout="wide")
 
-# 行動裝置直式瀏覽版面優化
 st.markdown("""
     <style>
     .block-container { padding: 1rem 1rem 2rem 1rem; }
@@ -29,31 +27,19 @@ def clean_industry_name(name):
     name = str(name).strip()
     return name[:-1] if name.endswith("業") else name
 
-# 1. 抓取雲端資料夾中的檔案清單
+# 1. 自動從 Google Drive 資料夾同步檔案
 @st.cache_data(ttl=300)
-def get_gdrive_excel_list(folder_id):
-    url = f"https://drive.google.com/embeddedfolderview?id={folder_id}#grid"
-    headers = {'User-Agent': 'Mozilla/5.0'}
-    r = requests.get(url, headers=headers)
-    items = []
-    if r.status_code == 200:
-        matches = re.findall(r'\["([a-zA-Z0-9_-]{25,})",\["([^"]+\.xlsx)"', r.text)
-        for f_id, f_name in matches:
-            if not any(x['id'] == f_id for x in items):
-                items.append({'id': f_id, 'name': f_name})
-    return items
+def sync_gdrive_folder(folder_id):
+    os.makedirs("data", exist_ok=True)
+    folder_url = f"https://drive.google.com/drive/folders/{folder_id}"
+    gdown.download_folder(url=folder_url, output="data", quiet=True, use_cookies=False)
+    files = glob.glob("data/*.xlsx")
+    return sorted(files, reverse=True)
 
-# 2. 串流下載並解析 Excel
-@st.cache_data(ttl=600)
-def load_data_from_gdrive(file_id):
-    download_url = f"https://drive.google.com/uc?export=download&id={file_id}"
-    response = requests.get(download_url)
-    if response.status_code != 200:
-        st.error("無法從 Google Drive 下載檔案，請確認共用權限。")
-        st.stop()
-    excel_data = io.BytesIO(response.content)
-    xls = pd.ExcelFile(excel_data)
-    
+# 2. 讀取 Excel 資料
+@st.cache_data
+def load_data(file_path):
+    xls = pd.ExcelFile(file_path)
     df_flow = pd.read_excel(xls, sheet_name="類股成交資金流動")
     df_flow['交易日期'] = pd.to_datetime(df_flow['交易日期'])
     df_flow['產業類別_標準'] = df_flow['產業類別'].apply(clean_industry_name)
@@ -66,23 +52,19 @@ def load_data_from_gdrive(file_id):
     df_breadth['進榜檔數'] = pd.to_numeric(df_breadth['進榜檔數'], errors='coerce').fillna(0)
     return df_flow, df_breadth
 
-# 側邊欄控制
 st.sidebar.header("⚙️ 盤面控制")
 
-files = get_gdrive_excel_list(GDRIVE_FOLDER_ID)
+files = sync_gdrive_folder(GDRIVE_FOLDER_ID)
 if not files:
-    st.error("雲端資料夾內未發現 .xlsx 檔案，或資料夾共用設定尚未開放。")
+    st.error("雲端資料夾同步失敗或未發現 .xlsx 檔案，請確認資料夾共用設定為「知道連結的任何人」。")
     st.stop()
 
-# 檔名依日期/名稱倒序排列（最新的在最上方）
-files = sorted(files, key=lambda x: x['name'], reverse=True)
-file_map = {f['name']: f['id'] for f in files}
-
+file_map = {os.path.basename(f): f for f in files}
 sel_file_name = st.sidebar.selectbox("📂 選擇資料檔案", list(file_map.keys()), index=0)
-sel_file_id = file_map[sel_file_name]
+sel_file_path = file_map[sel_file_name]
 
 # 載入選定檔案
-df_flow, df_breadth = load_data_from_gdrive(sel_file_id)
+df_flow, df_breadth = load_data(sel_file_path)
 
 sel_market = st.sidebar.selectbox("市場別", df_flow['市場別'].unique().tolist(), index=0)
 m_dates = sorted(df_flow[df_flow['市場別'] == sel_market]['交易日期'].unique())
