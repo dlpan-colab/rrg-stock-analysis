@@ -6,18 +6,32 @@ import numpy as np
 import plotly.graph_objects as go
 import streamlit as st
 
+# 靜態產生之版本戳記
+APP_VERSION = "20261014_2250"
+
 st.set_page_config(page_title="產業輪動分析系統", layout="wide")
 
+# 行動裝置直式瀏覽版面優化
 st.markdown("""
     <style>
     .block-container { padding: 1rem 1rem 2rem 1rem; }
+    .app-title-container { display: flex; align-items: baseline; gap: 10px; margin-bottom: 1rem; }
+    .app-title { font-size: 1.8rem; font-weight: bold; margin: 0; }
+    .app-version { font-size: 0.85rem; color: #888888; font-weight: normal; }
     @media (max-width: 768px) {
         .stDataFrame, .plotly-graph-div { width: 100% !important; }
+        .app-title { font-size: 1.4rem; }
     }
     </style>
 """, unsafe_allow_html=True)
 
-st.title("📊 產業輪動與週期博弈系統")
+# 標題與版本戳記（小字緊鄰）
+st.markdown(f"""
+    <div class="app-title-container">
+        <span class="app-title">📊 產業輪動與週期博弈系統</span>
+        <span class="app-version">v{APP_VERSION}</span>
+    </div>
+""", unsafe_allow_html=True)
 
 GDRIVE_FOLDER_ID = "1N9JjGDdbjjqQMYQaDZFv73Tag24_uHMW"
 
@@ -110,13 +124,26 @@ for ind in top_inds:
 
 fig.add_vline(x=100, line_dash="dash", line_color="gray")
 fig.add_hline(y=100, line_dash="dash", line_color="gray")
+
+# 手機與筆電最佳化圖例佈局（圖例置於正下方水平排列）
 fig.update_layout(
-    title=f"RRG 產業輪動象限圖 ({sel_date.strftime('%Y-%m-%d')})",
+    title=dict(
+        text=f"RRG 產業輪動象限圖 ({sel_date.strftime('%Y-%m-%d')})",
+        font=dict(size=16)
+    ),
     xaxis=dict(title="相對強度 (RS-Ratio)", range=[60, 140]),
     yaxis=dict(title="相對動能 (RS-Momentum)", range=[60, 140]),
     dragmode="pan",
-    height=520,
-    margin=dict(l=10, r=10, t=40, b=20)
+    height=580,
+    margin=dict(l=10, r=10, t=40, b=80),
+    legend=dict(
+        orientation="h",
+        yanchor="top",
+        y=-0.15,
+        xanchor="center",
+        x=0.5,
+        font=dict(size=11)
+    )
 )
 
 st.plotly_chart(fig, use_container_width=True)
