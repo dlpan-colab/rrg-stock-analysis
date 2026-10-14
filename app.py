@@ -7,31 +7,32 @@ import plotly.graph_objects as go
 import streamlit as st
 
 # 靜態產生之版本戳記
-APP_VERSION = "20261014_2310"
+APP_VERSION = "20261014_2315"
 
 st.set_page_config(page_title="產業輪動分析系統", layout="wide")
 
-# 行動裝置直式瀏覽版面優化
+# 行動裝置直式瀏覽版面優化（加大頂部 padding_top 至 4.2rem，徹底避開頂部工具列遮蔽）
 st.markdown("""
     <style>
-    .block-container { padding: 1rem 1rem 2rem 1rem; }
-    .app-title-container { display: flex; align-items: baseline; gap: 10px; margin-bottom: 1rem; }
-    .app-title { font-size: 1.8rem; font-weight: bold; margin: 0; }
-    .app-version { font-size: 0.85rem; color: #888888; font-weight: normal; }
+    .block-container { 
+        padding-top: 4.2rem !important; 
+        padding-left: 1rem !important; 
+        padding-right: 1rem !important; 
+        padding-bottom: 2rem !important; 
+    }
     @media (max-width: 768px) {
-        .stDataFrame, .plotly-graph-div { width: 100% !important; }
-        .app-title { font-size: 1.4rem; }
+        .block-container { 
+            padding-top: 4.5rem !important; 
+        }
+        .stDataFrame, .plotly-graph-div { 
+            width: 100% !important; 
+        }
     }
     </style>
 """, unsafe_allow_html=True)
 
-# 標題與版本戳記（小字緊鄰）
-st.markdown(f"""
-    <div class="app-title-container">
-        <span class="app-title">📊 產業輪動與週期博弈系統</span>
-        <span class="app-version">v{APP_VERSION}</span>
-    </div>
-""", unsafe_allow_html=True)
+# 標題與版本戳記（採用原生 Markdown 渲染，手機與筆電皆清晰可見不被覆蓋）
+st.markdown(f"### 📊 產業輪動與週期博弈系統 <span style='font-size: 0.75rem; color: #888888; font-weight: normal; vertical-align: middle; margin-left: 8px;'>v{APP_VERSION}</span>", unsafe_allow_html=True)
 
 GDRIVE_FOLDER_ID = "1N9JjGDdbjjqQMYQaDZFv73Tag24_uHMW"
 
@@ -50,7 +51,7 @@ def sync_gdrive_folder(folder_id):
     files = glob.glob("data/*.xlsx")
     return sorted(files, reverse=True)
 
-# 2. 讀取 Excel 資料（加入檔案修改時間，確保快取即時更新）
+# 2. 讀取 Excel 資料（以檔案路徑與最後修改時間作為快取特徵）
 @st.cache_data
 def load_data(file_path, file_mtime):
     xls = pd.ExcelFile(file_path)
@@ -77,17 +78,17 @@ file_map = {os.path.basename(f): f for f in files}
 sel_file_name = st.sidebar.selectbox("📂 選擇資料檔案", list(file_map.keys()), index=0)
 sel_file_path = file_map[sel_file_name]
 
-# 取得該檔案的最後修改時間以傳入快取
+# 取得檔案時間戳記
 file_mtime = os.path.getmtime(sel_file_path)
 
-# 載入選定檔案
+# 載入資料
 df_flow, df_breadth = load_data(sel_file_path, file_mtime)
 
-# 根據當前檔案名稱綁定 key，切換檔案時強制重新初始化選單與滑桿
+# 市場別（綁定當前檔案 key，確保切換檔案時重置選單）
 sel_market = st.sidebar.selectbox(
     "市場別", 
     df_flow['市場別'].unique().tolist(), 
-    index=0,
+    index=0, 
     key=f"market_{sel_file_name}"
 )
 
@@ -100,8 +101,13 @@ sel_date = st.sidebar.select_slider(
     format_func=lambda x: x.strftime('%Y-%m-%d'),
     key=f"date_{sel_file_name}_{sel_market}"
 )
-
-sel_trail = st.sidebar.slider("軌跡天數", min_value=3, max_value=20, value=7, key=f"trail_{sel_file_name}")
+sel_trail = st.sidebar.slider(
+    "軌跡天數", 
+    min_value=3, 
+    max_value=20, 
+    value=7, 
+    key=f"trail_{sel_file_name}"
+)
 
 # 計算 RRG
 m_flow = df_flow[df_flow['市場別'] == sel_market]
