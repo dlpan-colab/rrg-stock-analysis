@@ -7,7 +7,7 @@ import plotly.graph_objects as go
 import streamlit as st
 
 # 靜態產生之版本戳記
-APP_VERSION = "20261014_2305"
+APP_VERSION = "20261014_2310"
 
 st.set_page_config(page_title="產業輪動分析系統", layout="wide")
 
@@ -50,9 +50,9 @@ def sync_gdrive_folder(folder_id):
     files = glob.glob("data/*.xlsx")
     return sorted(files, reverse=True)
 
-# 2. 讀取 Excel 資料
+# 2. 讀取 Excel 資料（加入檔案修改時間，確保快取即時更新）
 @st.cache_data
-def load_data(file_path):
+def load_data(file_path, file_mtime):
     xls = pd.ExcelFile(file_path)
     df_flow = pd.read_excel(xls, sheet_name="類股成交資金流動")
     df_flow['交易日期'] = pd.to_datetime(df_flow['交易日期'])
@@ -77,19 +77,31 @@ file_map = {os.path.basename(f): f for f in files}
 sel_file_name = st.sidebar.selectbox("📂 選擇資料檔案", list(file_map.keys()), index=0)
 sel_file_path = file_map[sel_file_name]
 
-# 載入選定檔案
-df_flow, df_breadth = load_data(sel_file_path)
+# 取得該檔案的最後修改時間以傳入快取
+file_mtime = os.path.getmtime(sel_file_path)
 
-sel_market = st.sidebar.selectbox("市場別", df_flow['市場別'].unique().tolist(), index=0)
+# 載入選定檔案
+df_flow, df_breadth = load_data(sel_file_path, file_mtime)
+
+# 根據當前檔案名稱綁定 key，切換檔案時強制重新初始化選單與滑桿
+sel_market = st.sidebar.selectbox(
+    "市場別", 
+    df_flow['市場別'].unique().tolist(), 
+    index=0,
+    key=f"market_{sel_file_name}"
+)
+
 m_dates = sorted(df_flow[df_flow['市場別'] == sel_market]['交易日期'].unique())
 
 sel_date = st.sidebar.select_slider(
     "基準交易日",
     options=m_dates,
     value=m_dates[-1],
-    format_func=lambda x: x.strftime('%Y-%m-%d')
+    format_func=lambda x: x.strftime('%Y-%m-%d'),
+    key=f"date_{sel_file_name}_{sel_market}"
 )
-sel_trail = st.sidebar.slider("軌跡天數", min_value=3, max_value=20, value=7)
+
+sel_trail = st.sidebar.slider("軌跡天數", min_value=3, max_value=20, value=7, key=f"trail_{sel_file_name}")
 
 # 計算 RRG
 m_flow = df_flow[df_flow['市場別'] == sel_market]
@@ -122,7 +134,7 @@ for ind in top_inds:
             fig.add_trace(go.Scatter(x=x_vals, y=y_vals, mode='lines+markers', name=ind, line=dict(width=2)))
             fig.add_trace(go.Scatter(x=[x_vals[-1]], y=[y_vals[-1]], mode='markers+text', text=[ind], textposition="top center", marker=dict(size=10), showlegend=False))
 
-# 動態計算邊界：鎖死在資料極值區間，絕不滑入小於 40 或大於 160 的無效區間
+# 動態計算邊界：鎖死在資料極值區間
 x_min_bound = max(40.0, float(np.min(all_x)) - 5.0) if all_x else 40.0
 x_max_bound = min(160.0, float(np.max(all_x)) + 5.0) if all_x else 160.0
 y_min_bound = max(40.0, float(np.min(all_y)) - 5.0) if all_y else 40.0
