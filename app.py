@@ -7,7 +7,7 @@ import plotly.graph_objects as go
 import streamlit as st
 
 # 靜態產生之版本戳記
-APP_VERSION = "20261014_2250"
+APP_VERSION = "20261014_2258"
 
 st.set_page_config(page_title="產業輪動分析系統", layout="wide")
 
@@ -108,31 +108,53 @@ top_inds = m_flow[m_flow['交易日期'] == sel_date].groupby('產業類別_標�
 
 # 繪製 RRG
 fig = go.Figure()
-fig.add_shape(type="rect", x0=100, x1=200, y0=100, y1=200, fillcolor="rgba(0, 200, 0, 0.08)", layer="below", line_width=0)
-fig.add_shape(type="rect", x0=100, x1=200, y0=0, y1=100, fillcolor="rgba(255, 215, 0, 0.08)", layer="below", line_width=0)
-fig.add_shape(type="rect", x0=0, x1=100, y0=0, y1=100, fillcolor="rgba(200, 0, 0, 0.08)", layer="below", line_width=0)
-fig.add_shape(type="rect", x0=0, x1=100, y0=100, y1=200, fillcolor="rgba(0, 100, 255, 0.08)", layer="below", line_width=0)
 
+# 統計當前所有顯示點的極值邊界
+all_x, all_y = [], []
 for ind in top_inds:
     if ind in rs_ratio_c.columns:
         valid_hist = [d for d in hist if d in rs_ratio_c.index]
         if valid_hist:
             x_vals = rs_ratio_c.loc[valid_hist, ind].values
             y_vals = rs_mom_c.loc[valid_hist, ind].values
+            all_x.extend(x_vals)
+            all_y.extend(y_vals)
             fig.add_trace(go.Scatter(x=x_vals, y=y_vals, mode='lines+markers', name=ind, line=dict(width=2)))
             fig.add_trace(go.Scatter(x=[x_vals[-1]], y=[y_vals[-1]], mode='markers+text', text=[ind], textposition="top center", marker=dict(size=10), showlegend=False))
+
+# 動態計算邊界：鎖死在資料的 [最小值 - 5, 最大值 + 5]，絕對不超出 40 與 160
+x_min_bound = max(40.0, float(np.min(all_x)) - 5.0) if all_x else 40.0
+x_max_bound = min(160.0, float(np.max(all_x)) + 5.0) if all_x else 160.0
+y_min_bound = max(40.0, float(np.min(all_y)) - 5.0) if all_y else 40.0
+y_max_bound = min(160.0, float(np.max(all_y)) + 5.0) if all_y else 160.0
+
+# 象限背景色貼齊極值邊界
+fig.add_shape(type="rect", x0=100, x1=x_max_bound, y0=100, y1=y_max_bound, fillcolor="rgba(0, 200, 0, 0.08)", layer="below", line_width=0)
+fig.add_shape(type="rect", x0=100, x1=x_max_bound, y0=y_min_bound, y1=100, fillcolor="rgba(255, 215, 0, 0.08)", layer="below", line_width=0)
+fig.add_shape(type="rect", x0=x_min_bound, x1=100, y0=y_min_bound, y1=100, fillcolor="rgba(200, 0, 0, 0.08)", layer="below", line_width=0)
+fig.add_shape(type="rect", x0=x_min_bound, x1=100, y0=100, y1=y_max_bound, fillcolor="rgba(0, 100, 255, 0.08)", layer="below", line_width=0)
 
 fig.add_vline(x=100, line_dash="dash", line_color="gray")
 fig.add_hline(y=100, line_dash="dash", line_color="gray")
 
-# 手機與筆電最佳化圖例佈局（圖例置於正下方水平排列）
+# 限制邊界（minallowed / maxallowed 限制平移範圍，絕不滑入負數與無資料區）
 fig.update_layout(
     title=dict(
         text=f"RRG 產業輪動象限圖 ({sel_date.strftime('%Y-%m-%d')})",
         font=dict(size=16)
     ),
-    xaxis=dict(title="相對強度 (RS-Ratio)", range=[60, 140]),
-    yaxis=dict(title="相對動能 (RS-Momentum)", range=[60, 140]),
+    xaxis=dict(
+        title="相對強度 (RS-Ratio)",
+        range=[max(x_min_bound, 60), min(x_max_bound, 140)],
+        minallowed=x_min_bound,
+        maxallowed=x_max_bound
+    ),
+    yaxis=dict(
+        title="相對動能 (RS-Momentum)",
+        range=[max(y_min_bound, 60), min(y_max_bound, 140)],
+        minallowed=y_min_bound,
+        maxallowed=y_max_bound
+    ),
     dragmode="pan",
     height=580,
     margin=dict(l=10, r=10, t=40, b=80),
