@@ -7,7 +7,7 @@ import plotly.graph_objects as go
 import streamlit as st
 
 # 靜態產生之版本戳記
-APP_VERSION = "20261014_2258"
+APP_VERSION = "20261014_2305"
 
 st.set_page_config(page_title="產業輪動分析系統", layout="wide")
 
@@ -122,7 +122,7 @@ for ind in top_inds:
             fig.add_trace(go.Scatter(x=x_vals, y=y_vals, mode='lines+markers', name=ind, line=dict(width=2)))
             fig.add_trace(go.Scatter(x=[x_vals[-1]], y=[y_vals[-1]], mode='markers+text', text=[ind], textposition="top center", marker=dict(size=10), showlegend=False))
 
-# 動態計算邊界：鎖死在資料的 [最小值 - 5, 最大值 + 5]，絕對不超出 40 與 160
+# 動態計算邊界：鎖死在資料極值區間，絕不滑入小於 40 或大於 160 的無效區間
 x_min_bound = max(40.0, float(np.min(all_x)) - 5.0) if all_x else 40.0
 x_max_bound = min(160.0, float(np.max(all_x)) + 5.0) if all_x else 160.0
 y_min_bound = max(40.0, float(np.min(all_y)) - 5.0) if all_y else 40.0
@@ -137,7 +137,7 @@ fig.add_shape(type="rect", x0=x_min_bound, x1=100, y0=100, y1=y_max_bound, fillc
 fig.add_vline(x=100, line_dash="dash", line_color="gray")
 fig.add_hline(y=100, line_dash="dash", line_color="gray")
 
-# 限制邊界（minallowed / maxallowed 限制平移範圍，絕不滑入負數與無資料區）
+# 限制邊界與排版設定
 fig.update_layout(
     title=dict(
         text=f"RRG 產業輪動象限圖 ({sel_date.strftime('%Y-%m-%d')})",
@@ -168,7 +168,16 @@ fig.update_layout(
     )
 )
 
-st.plotly_chart(fig, use_container_width=True)
+# 渲染圖表：啟用滾輪/手勢雙指縮放，保留重置視角工具列
+st.plotly_chart(
+    fig,
+    use_container_width=True,
+    config={
+        'scrollZoom': True,
+        'displayModeBar': True,
+        'modeBarButtonsToRemove': ['lasso2d', 'select2d']
+    }
+)
 
 # 顯示警報清單
 alerts = []
